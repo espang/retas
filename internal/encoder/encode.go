@@ -5,12 +5,6 @@ import (
 	"sort"
 )
 
-type StringDeEncoder interface {
-	Encode(string) ([]byte, error)
-	Decode([]byte) string
-	Bytes() int
-}
-
 type IntDeEncoder interface {
 	// Encode transform the value
 	// when the value has been used before
@@ -76,6 +70,13 @@ func intToBytes(v, bytes int) []byte {
 	return buf
 }
 
+func bytesByUniques(uniques int) int {
+	if uniques < 1<<8 {
+		return 1
+	}
+	return 1 + bytesByUniques(uniques<<8)
+}
+
 func NewIntDeEncoder(ints []int) IntDeEncoder {
 	intset := map[int]struct{}{}
 
@@ -84,7 +85,7 @@ func NewIntDeEncoder(ints []int) IntDeEncoder {
 	}
 
 	//calc that!
-	bytes := len(intset) << 8
+	bytes := bytesByUniques(len(intset))
 
 	uniques := make([]int, len(intset))
 	for k := range intset {
