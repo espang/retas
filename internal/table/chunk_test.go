@@ -7,7 +7,7 @@ import (
 
 func TestChunkQuery(t *testing.T) {
 	chunk := chunk{
-		data: [][]int{
+		data: [][]byte{
 			{
 				1, 2, 3, 4, 5,
 			},
