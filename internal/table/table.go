@@ -2,6 +2,7 @@ package table
 
 import (
 	"errors"
+	"fmt"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -32,7 +33,7 @@ func (t table) index(columnID int) (int, int) {
 
 func (t table) Histogram(columnID int, bins ...int) ([]uint64, error) {
 	if !sort.IntsAreSorted(bins) {
-		return nil, errors.New("bins have to be sorted")
+		return nil, fmt.Errorf("bins have to be sorted %v", bins)
 	}
 	if len(bins) < 2 {
 		return nil, errors.New("need at least 2 bins")
@@ -42,30 +43,34 @@ func (t table) Histogram(columnID int, bins ...int) ([]uint64, error) {
 	if idx == -1 {
 		return nil, errors.New("column not found")
 	}
-	if width > 1 {
-		return nil, errors.New("invalid column for binning")
-	}
+
+	indexer := byteIndexer(width, bins)
 
 	hist := make([]uint64, len(bins)-1)
+	work := make(chan Iterator, 4)
 	var wg sync.WaitGroup
-	for _, c := range t.chunks {
-		iter := c.query(idx, 1)
+	for w := 0; w < 8; w++ {
 		wg.Add(1)
 		go func(g *sync.WaitGroup) {
-			chist := make([]uint64, len(bins))
-			for iter.Next() {
-				v := iter.Value()
-				idx := sort.Search(len(bins), func(i int) bool { return byteViewLen1GTE(v, bins[i]) })
-				chist[idx]++
+			chist := make([]uint64, len(bins)+1)
+			for iter := range work {
+				for iter.Next() {
+					chist[indexer(iter.Value())]++
+				}
 			}
-			for i, v := range chist[:len(bins)-1] {
+			for i, v := range chist[1:len(bins)] {
 				_ = atomic.AddUint64(&hist[i], v)
 			}
+			g.Done()
 		}(&wg)
 	}
+	for _, c := range t.chunks {
+		work <- c.query(idx, width)
+	}
+	close(work)
 	wg.Wait()
 
-	return hist[:len(hist)-1], nil
+	return hist, nil
 }
 
 type entry struct {
@@ -75,17 +80,27 @@ type entry struct {
 }
 
 type Column struct {
-	ID   int // address for the column
-	data [][]byte
+	ID    int // address for the column
+	Width int
+	data  [][]byte
 }
 
 func New(cols ...Column) (Table, error) {
-
 	s := map[int]struct{}{}
 	s2 := map[int]struct{}{}
+	var idx, length int
+	var entries []entry
 	for _, col := range cols {
+		length = len(col.data)
 		s2[len(col.data)] = struct{}{}
 		s[col.ID] = struct{}{}
+
+		entries = append(entries, entry{
+			ID:    col.ID,
+			Idx:   idx,
+			Width: col.Width,
+		})
+		idx += col.Width
 	}
 	if len(s2) > 1 {
 		return table{}, errors.New("n")
@@ -94,5 +109,26 @@ func New(cols ...Column) (Table, error) {
 		return table{}, errors.New("o")
 	}
 
-	return nil, nil
+	chunksize := 256 * 256
+	var chunks []chunk
+	var current chunk
+	for i := 0; i < length; i++ {
+		if i != 0 && i%chunksize == 0 {
+			chunks = append(chunks, current)
+			current = chunk{}
+		}
+		var row []byte
+		for _, col := range cols {
+			row = append(row, col.data[i]...)
+		}
+		current.data = append(current.data, row)
+	}
+	if len(current.data) > 0 {
+		chunks = append(chunks, current)
+	}
+
+	return table{
+		chunks:  chunks,
+		entries: entries,
+	}, nil
 }
