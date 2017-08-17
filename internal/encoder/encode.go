@@ -38,7 +38,10 @@ func (de intDeEncoder) Bytes() int { return de.width }
 
 func (de intDeEncoder) Encode(v int) ([]byte, bool) {
 	idx := sort.SearchInts(de.values, v)
-	if idx != len(de.values) && de.values[idx] != v {
+	if idx == len(de.values) {
+		return nil, false
+	}
+	if de.values[idx] != v {
 		return nil, false
 	}
 	return de.encoding[idx], true
@@ -58,23 +61,7 @@ func (de intDeEncoder) Transform(v int) ([]byte, []byte) {
 func (de intDeEncoder) Decode(buf []byte) int {
 	// Decode succeeds
 	idx := sort.Search(len(de.encoding), func(i int) bool { return bytes.Compare(buf, de.encoding[i]) < 0 })
-	return de.values[idx]
-}
-
-func intToBytes(v, bytes int) []byte {
-	buf := make([]byte, bytes)
-	for i := bytes - 1; i >= 0; i-- {
-		buf[i] = byte(v & 0xff)
-		v >>= 8
-	}
-	return buf
-}
-
-func bytesByUniques(uniques int) int {
-	if uniques < 1<<8 {
-		return 1
-	}
-	return 1 + bytesByUniques(uniques<<8)
+	return de.values[idx-1]
 }
 
 func NewIntDeEncoder(ints []int) IntDeEncoder {
@@ -87,7 +74,7 @@ func NewIntDeEncoder(ints []int) IntDeEncoder {
 	//calc that!
 	bytes := bytesByUniques(len(intset))
 
-	uniques := make([]int, len(intset))
+	uniques := make([]int, 0, len(intset))
 	for k := range intset {
 		uniques = append(uniques, k)
 	}

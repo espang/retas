@@ -23,7 +23,10 @@ func (de stringDeEncoder) Bytes() int { return de.width }
 
 func (de stringDeEncoder) Encode(v string) ([]byte, bool) {
 	idx := sort.SearchStrings(de.values, v)
-	if idx != len(de.values) && de.values[idx] != v {
+	if idx == len(de.values) {
+		return nil, false
+	}
+	if de.values[idx] != v {
 		return nil, false
 	}
 	return de.encoding[idx], true
@@ -43,26 +46,24 @@ func (de stringDeEncoder) Transform(v string) ([]byte, []byte) {
 func (de stringDeEncoder) Decode(buf []byte) string {
 	// Decode succeeds
 	idx := sort.Search(len(de.encoding), func(i int) bool { return bytes.Compare(buf, de.encoding[i]) < 0 })
-	return de.values[idx]
+	return de.values[idx-1]
 }
 
-func NewStringDeEncoder(strings Stringtring) StringDeEncoder {
+func NewStringDeEncoder(strings []string) StringDeEncoder {
 	stringset := map[string]struct{}{}
 
 	for _, v := range strings {
 		stringset[v] = struct{}{}
 	}
 
-	//calc that!
 	bytes := bytesByUniques(len(stringset))
 
-	uniques := make([]string, len(stringset))
+	uniques := make([]string, 0, len(stringset))
 	for k := range stringset {
 		uniques = append(uniques, k)
 	}
 
 	sort.Strings(uniques)
-
 	res := stringDeEncoder{
 		width: bytes,
 	}
