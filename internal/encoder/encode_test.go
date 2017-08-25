@@ -17,7 +17,41 @@ func arange(start, end, stepsize int) []int {
 	return res
 }
 
-func stringify(ints []int) (func(int) string, []string) {
+type stringIter struct {
+	ss  []string
+	idx int
+}
+
+func (si *stringIter) Next() bool {
+	if si.idx == len(si.ss) {
+		return false
+	}
+	si.idx++
+	return true
+}
+
+func (si *stringIter) Value() string {
+	return si.ss[si.idx-1]
+}
+
+type intIter struct {
+	is  []int
+	idx int
+}
+
+func (ii *intIter) Next() bool {
+	if ii.idx == len(ii.is) {
+		return false
+	}
+	ii.idx++
+	return true
+}
+
+func (ii *intIter) Value() int {
+	return ii.is[ii.idx-1]
+}
+
+func stringify(ints []int) (func(int) string, StringIterator) {
 	if len(ints) == 0 {
 		panic("expect at least 1 value")
 	}
@@ -36,7 +70,7 @@ func stringify(ints []int) (func(int) string, []string) {
 	for _, i := range ints {
 		res = append(res, t(i))
 	}
-	return t, res
+	return t, &stringIter{ss: res}
 }
 
 var testCases = []struct {
@@ -94,7 +128,9 @@ var testCases = []struct {
 func TestIntDeEncode(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			de := NewIntDeEncoder(tc.input)
+			de := NewIntDeEncoder(
+				&intIter{is: tc.input},
+			)
 
 			if got := de.Bytes(); got != tc.bytes {
 				t.Errorf("got %v; want %v", got, tc.bytes)

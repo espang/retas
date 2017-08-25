@@ -5,6 +5,11 @@ import (
 	"sort"
 )
 
+type StringIterator interface {
+	Next() bool
+	Value() string
+}
+
 type StringDeEncoder interface {
 	Encode(string) ([]byte, bool)
 	Decode([]byte) string
@@ -49,15 +54,14 @@ func (de stringDeEncoder) Decode(buf []byte) string {
 	return de.values[idx-1]
 }
 
-func NewStringDeEncoder(strings []string) StringDeEncoder {
+func NewStringDeEncoder(iter StringIterator) StringDeEncoder {
 	stringset := map[string]struct{}{}
 
-	for _, v := range strings {
-		stringset[v] = struct{}{}
+	for iter.Next() {
+		stringset[iter.Value()] = struct{}{}
 	}
 
 	bytes := bytesByUniques(len(stringset))
-
 	uniques := make([]string, 0, len(stringset))
 	for k := range stringset {
 		uniques = append(uniques, k)

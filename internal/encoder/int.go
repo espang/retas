@@ -5,6 +5,11 @@ import (
 	"sort"
 )
 
+type IntIterator interface {
+	Next() bool
+	Value() int
+}
+
 type IntDeEncoder interface {
 	// Encode transform the value
 	// when the value has been used before
@@ -64,11 +69,11 @@ func (de intDeEncoder) Decode(buf []byte) int {
 	return de.values[idx-1]
 }
 
-func NewIntDeEncoder(ints []int) IntDeEncoder {
+func NewIntDeEncoder(ints IntIterator) IntDeEncoder {
 	intset := map[int]struct{}{}
 
-	for _, v := range ints {
-		intset[v] = struct{}{}
+	for ints.Next() {
+		intset[ints.Value()] = struct{}{}
 	}
 
 	//calc that!
